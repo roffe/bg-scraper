@@ -132,7 +132,7 @@ func (s *Scraper) downloadImage(img image) error {
 		filename = img.id + ".jpg"
 	}
 
-	f, err := os.OpenFile("./download/"+img.slug+"/"+filename, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0744)
+	f, err := os.OpenFile("./download/"+img.slug+"/"+filename, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
 	if err != nil {
 		return err
 	}

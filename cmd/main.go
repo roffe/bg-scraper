@@ -3,8 +3,11 @@ package main
 import (
 	"log"
 	"os"
+	"sync"
 
 	bgscraper "github.com/roffe/bg-scraper"
+	"github.com/roffe/bg-scraper/pkg/desktopnexus"
+	"github.com/roffe/bg-scraper/pkg/wallpapercave"
 	"github.com/roffe/bg-scraper/pkg/wallpaperscraft"
 )
 
@@ -20,13 +23,24 @@ func init() {
 
 func main() {
 	var pages = []bgscraper.Scraper{
-		//wallpapercave.New(searchArgs),
+		desktopnexus.New(searchArgs),
+		wallpapercave.New(searchArgs),
 		wallpaperscraft.New(searchArgs),
 	}
 
+	var wg sync.WaitGroup
+	semchan := make(chan struct{}, 3)
 	for _, p := range pages {
-		if err := p.Scrape(); err != nil {
-			log.Fatal(err)
-		}
+		semchan <- struct{}{}
+		wg.Add(1)
+		go func(p bgscraper.Scraper) {
+			defer wg.Done()
+			if err := p.Scrape(); err != nil {
+				log.Fatal(err)
+			}
+			<-semchan
+		}(p)
 	}
+	wg.Wait()
+	log.Println("Done!")
 }

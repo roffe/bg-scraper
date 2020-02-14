@@ -50,7 +50,7 @@ func (s *Scraper) Scrape() error {
 	}
 
 	if len(images) > 0 {
-		utils.CreateDirIfNotExist("./download/" + s.terms)
+		utils.CreateDirIfNotExist("./download/wallpaperscraft/" + s.terms)
 		semchan := make(chan struct{}, 3)
 		var wg sync.WaitGroup
 		for _, img := range images {
@@ -72,14 +72,14 @@ func (s *Scraper) Scrape() error {
 
 func (s *Scraper) getPage(pageNum int) (*goquery.Document, bool, error) {
 	url := fmt.Sprintf("%s/search/?order=&page=%d&query=%s&size=", s.url, pageNum, s.terms)
-	response, err := http.Get(url)
+	resp, err := http.Get(url)
 	if err != nil {
 		return nil, false, err
 	}
-	defer response.Body.Close()
+	defer resp.Body.Close()
 
 	// Create a goquery document from the HTTP response
-	document, err := goquery.NewDocumentFromReader(response.Body)
+	document, err := goquery.NewDocumentFromReader(resp.Body)
 	if err != nil {
 		return nil, false, fmt.Errorf("Error loading HTTP response body: %s", err)
 	}
@@ -104,11 +104,13 @@ func (s *Scraper) downloadImage(img string) error {
 		return err
 	}
 	defer resp.Body.Close()
+
 	if resp.StatusCode != 200 {
-		return fmt.Errorf("not 200, %s", img)
+		log.Printf("not 200, %s\n", img)
+		return nil
 	}
 
-	f, err := os.OpenFile("./download/"+s.terms+"/"+fname, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0744)
+	f, err := os.OpenFile("./download/wallpaperscraft/"+s.terms+"/"+fname, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
 	if err != nil {
 		return err
 	}
