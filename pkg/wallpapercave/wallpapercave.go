@@ -6,14 +6,14 @@ import (
 	"log"
 	"net/http"
 	"os"
-	"strings"
 
 	"github.com/PuerkitoBio/goquery"
+	"github.com/roffe/bg-scraper/pkg/utils"
 )
 
 // Scraper ...
 type Scraper struct {
-	url, terms, agent string
+	url, terms string
 }
 
 // New returns a new wallpapercave scraper
@@ -21,7 +21,7 @@ func New(terms string) *Scraper {
 	return &Scraper{
 		url:   "https://wallpapercave.com",
 		terms: terms,
-		agent: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_3) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/80.0.3987.87 Safari/537.36 Edg/80.0.361.50",
+		//agent: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_3) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/80.0.3987.87 Safari/537.36 Edg/80.0.361.50",
 	}
 }
 
@@ -50,21 +50,24 @@ func (w *Scraper) Scrape() error {
 			}
 		}
 	})
-
-	fmt.Printf("%q\n", albums)
+	log.Println("Found the following albums:")
+	log.Printf("%q\n", albums)
 
 	var toDownload []image
 
 	for _, album := range albums {
 		res := w.parseAlbum(album)
 		toDownload = append(toDownload, res...)
-		break
 	}
-
+	semchan := make(chan struct{}, 3)
 	for _, img := range toDownload {
-		if err := w.downloadImage(img); err != nil {
-			log.Fatal(err)
-		}
+		semchan <- struct{}{}
+		go func(img image) {
+			if err := w.downloadImage(img); err != nil {
+				log.Fatal(err)
+			}
+			<-semchan
+		}(img)
 	}
 
 	return nil
@@ -75,7 +78,7 @@ type image struct {
 }
 
 func (w *Scraper) parseAlbum(album string) (images []image) {
-	createDirIfNotExist(strings.TrimPrefix(album, "/"))
+	utils.CreateDirIfNotExist("./download" + album)
 
 	response, err := http.Get(w.url + album)
 	if err != nil {
@@ -117,7 +120,7 @@ func (w *Scraper) downloadImage(img image) error {
 	if err != nil {
 		log.Fatal(err)
 	}
-	req.Header.Set("user-agent", w.agent)
+	//req.Header.Set("user-agent", w.agent)
 
 	client := &http.Client{}
 	resp, err := client.Do(req)
@@ -126,7 +129,7 @@ func (w *Scraper) downloadImage(img image) error {
 	}
 	defer resp.Body.Close()
 
-	f, err := os.OpenFile(img.slug+"/"+img.id+".jpg", os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0744)
+	f, err := os.OpenFile("./download/"+img.slug+"/"+img.id+".jpg", os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0744)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -137,13 +140,4 @@ func (w *Scraper) downloadImage(img image) error {
 	}
 	log.Println("Downloaded ", written, "to ", f.Name())
 	return nil
-}
-
-func createDirIfNotExist(dir string) {
-	if _, err := os.Stat(dir); os.IsNotExist(err) {
-		err = os.MkdirAll(dir, 0755)
-		if err != nil {
-			log.Fatal(err)
-		}
-	}
 }
