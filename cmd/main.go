@@ -4,13 +4,9 @@ import (
 	"log"
 	"os"
 
-	"github.com/roffe/bg-scraper/pkg/wallpapercave"
+	bgscraper "github.com/roffe/bg-scraper"
+	"github.com/roffe/bg-scraper/pkg/wallpaperscraft"
 )
-
-// Scraper our scraper interface
-type Scraper interface {
-	Scrape() error
-}
 
 var searchArgs string
 
@@ -23,8 +19,9 @@ func init() {
 }
 
 func main() {
-	var pages = []Scraper{
-		wallpapercave.New(searchArgs),
+	var pages = []bgscraper.Scraper{
+		//wallpapercave.New(searchArgs),
+		wallpaperscraft.New(searchArgs),
 	}
 
 	for _, p := range pages {

@@ -5,6 +5,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"net/url"
 	"os"
 
 	"github.com/PuerkitoBio/goquery"
@@ -13,6 +14,7 @@ import (
 
 // Scraper ...
 type Scraper struct {
+	URL        url.URL
 	url, terms string
 }
 
@@ -21,27 +23,23 @@ func New(terms string) *Scraper {
 	return &Scraper{
 		url:   "https://wallpapercave.com",
 		terms: terms,
-		//agent: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_3) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/80.0.3987.87 Safari/537.36 Edg/80.0.361.50",
 	}
 }
 
 // Scrape ...
-func (w *Scraper) Scrape() error {
-	searchURL := w.url + "/search?q=" + w.terms
+func (s *Scraper) Scrape() error {
+	searchURL := s.url + "/search?q=" + s.terms
 	response, err := http.Get(searchURL)
 	if err != nil {
-		log.Fatal(err)
+		return err
 	}
 	defer response.Body.Close()
 
-	// Create a goquery document from the HTTP response
 	document, err := goquery.NewDocumentFromReader(response.Body)
 	if err != nil {
-		log.Fatal("Error loading HTTP response body. ", err)
+		return fmt.Errorf("Error loading HTTP response body: %s", err)
 	}
 
-	// Find all links and process them with the function
-	// defined earlier
 	var albums []string
 	document.Find("a").Each(func(index int, element *goquery.Selection) {
 		if element.HasClass("albumthumbnail") {
@@ -50,20 +48,21 @@ func (w *Scraper) Scrape() error {
 			}
 		}
 	})
-	log.Println("Found the following albums:")
-	log.Printf("%q\n", albums)
+
+	//log.Println("Found the following albums:")
+	//log.Printf("%q\n", albums)
 
 	var toDownload []image
 
 	for _, album := range albums {
-		res := w.parseAlbum(album)
+		res := s.parseAlbum(album)
 		toDownload = append(toDownload, res...)
 	}
 	semchan := make(chan struct{}, 3)
 	for _, img := range toDownload {
 		semchan <- struct{}{}
 		go func(img image) {
-			if err := w.downloadImage(img); err != nil {
+			if err := s.downloadImage(img); err != nil {
 				log.Fatal(err)
 			}
 			<-semchan
@@ -77,10 +76,10 @@ type image struct {
 	id, slug string
 }
 
-func (w *Scraper) parseAlbum(album string) (images []image) {
+func (s *Scraper) parseAlbum(album string) (images []image) {
 	utils.CreateDirIfNotExist("./download" + album)
 
-	response, err := http.Get(w.url + album)
+	response, err := http.Get(s.url + album)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -101,11 +100,7 @@ func (w *Scraper) parseAlbum(album string) (images []image) {
 			if !exists {
 				return
 			}
-			//downlink := w.url + "/download" + album + "-" + id
-			images = append(images, image{
-				id:   id,
-				slug: slug,
-			})
+			images = append(images, image{id: id, slug: slug})
 
 		}
 
@@ -114,29 +109,22 @@ func (w *Scraper) parseAlbum(album string) (images []image) {
 	return images
 }
 
-func (w *Scraper) downloadImage(img image) error {
-	downloadURL := fmt.Sprintf("%s/download/%s-%s", w.url, img.slug, img.id)
-	req, err := http.NewRequest("GET", downloadURL, nil)
+func (s *Scraper) downloadImage(img image) error {
+	downloadURL := fmt.Sprintf("%s/download/%s-%s", s.url, img.slug, img.id)
+	resp, err := http.Get(downloadURL)
 	if err != nil {
-		log.Fatal(err)
-	}
-	//req.Header.Set("user-agent", w.agent)
-
-	client := &http.Client{}
-	resp, err := client.Do(req)
-	if err != nil {
-		log.Fatal(err)
+		return err
 	}
 	defer resp.Body.Close()
 
 	f, err := os.OpenFile("./download/"+img.slug+"/"+img.id+".jpg", os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0744)
 	if err != nil {
-		log.Fatal(err)
+		return err
 	}
 	defer f.Close()
 	written, err := io.Copy(f, resp.Body)
 	if err != nil {
-		log.Fatal(err)
+		return err
 	}
 	log.Println("Downloaded ", written, "to ", f.Name())
 	return nil
