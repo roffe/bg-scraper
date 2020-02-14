@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"sync"
 
 	"github.com/PuerkitoBio/goquery"
 	"github.com/roffe/bg-scraper/pkg/utils"
@@ -48,21 +49,22 @@ func (s *Scraper) Scrape() error {
 		page++
 	}
 
-	//log.Println("Found the following images:")
-	//log.Printf("%q\n", images)
-
 	if len(images) > 0 {
 		utils.CreateDirIfNotExist("./download/" + s.terms)
 		semchan := make(chan struct{}, 3)
+		var wg sync.WaitGroup
 		for _, img := range images {
 			semchan <- struct{}{}
+			wg.Add(1)
 			go func(img string) {
+				defer wg.Done()
 				if err := s.downloadImage(img); err != nil {
 					log.Fatal(err)
 				}
 				<-semchan
 			}(img)
 		}
+		wg.Wait()
 	}
 
 	return nil
@@ -103,7 +105,7 @@ func (s *Scraper) downloadImage(img string) error {
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != 200 {
-		return nil
+		return fmt.Errorf("not 200, %s", img)
 	}
 
 	f, err := os.OpenFile("./download/"+s.terms+"/"+fname, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0744)

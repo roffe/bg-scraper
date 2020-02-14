@@ -4,9 +4,11 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"mime"
 	"net/http"
 	"net/url"
 	"os"
+	"sync"
 
 	"github.com/PuerkitoBio/goquery"
 	"github.com/roffe/bg-scraper/pkg/utils"
@@ -59,15 +61,19 @@ func (s *Scraper) Scrape() error {
 		toDownload = append(toDownload, res...)
 	}
 	semchan := make(chan struct{}, 3)
+	var wg sync.WaitGroup
 	for _, img := range toDownload {
 		semchan <- struct{}{}
+		wg.Add(1)
 		go func(img image) {
+			defer wg.Done()
 			if err := s.downloadImage(img); err != nil {
 				log.Fatal(err)
 			}
 			<-semchan
 		}(img)
 	}
+	wg.Wait()
 
 	return nil
 }
@@ -117,7 +123,16 @@ func (s *Scraper) downloadImage(img image) error {
 	}
 	defer resp.Body.Close()
 
-	f, err := os.OpenFile("./download/"+img.slug+"/"+img.id+".jpg", os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0744)
+	_, params, err := mime.ParseMediaType(resp.Header.Get("content-disposition"))
+	if err != nil {
+		return err
+	}
+	filename, ok := params["filename"]
+	if !ok {
+		filename = img.id + ".jpg"
+	}
+
+	f, err := os.OpenFile("./download/"+img.slug+"/"+filename, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0744)
 	if err != nil {
 		return err
 	}
@@ -126,6 +141,6 @@ func (s *Scraper) downloadImage(img image) error {
 	if err != nil {
 		return err
 	}
-	log.Println("Downloaded ", written, "to ", f.Name())
+	log.Println("Downloaded", written, "bytes to", f.Name())
 	return nil
 }

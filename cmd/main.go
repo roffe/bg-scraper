@@ -26,7 +26,7 @@ func main() {
 
 	for _, p := range pages {
 		if err := p.Scrape(); err != nil {
-			panic(err)
+			log.Fatal(err)
 		}
 	}
 }
